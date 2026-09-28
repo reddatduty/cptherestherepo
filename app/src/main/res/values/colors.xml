@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ap_background">#F4F6FA</color>
+    <color name="ap_icon_bg">#11131A</color>
+    <color name="ap_icon_accent">#7C91FF</color>
+    <color name="ap_icon_white">#FFFFFF</color>
+</resources>
