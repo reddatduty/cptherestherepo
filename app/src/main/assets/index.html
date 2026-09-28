@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<meta name="theme-color" content="#f5f6fb" />
+<title>AreaPulse</title>
+<link rel="stylesheet" href="app.css" />
+
+</head>
+<body>
+<div id="app">
+  <div id="map">
+    <div id="tiles"></div>
+    <div id="markers"></div>
+    <div class="crosshair" id="crosshair"></div>
+  </div>
+
+  <div class="topbar">
+    <div class="brand">AREA<b>PULSE</b></div>
+    <div class="searchWrap">
+      <form class="search" id="searchForm">
+        <span>⌕</span><input id="searchInput" autocomplete="off" placeholder="Search city, county, country…" />
+        <button class="iconBtn" type="submit">Go</button>
+      </form>
+      <div class="searchResults" id="searchResults"></div>
+    </div>
+  </div>
+
+  <div class="scopeRow" id="scopeRow">
+    <button class="scope" data-scope="country">Country</button>
+    <button class="scope" data-scope="county">County</button>
+    <button class="scope active" data-scope="city">City</button>
+    <button class="scope" data-scope="zone">Zone</button>
+  </div>
+  <div class="badge" id="areaBadge">Romania · City view</div>
+  <div class="mapTools"><button class="mapTool" id="zoomIn" aria-label="Zoom in">＋</button><button class="mapTool" id="zoomOut" aria-label="Zoom out">−</button><button class="mapTool" id="locationBtn" aria-label="Use my location">◎</button><button class="mapTool" id="homeBtn" aria-label="Show Romania">⌂</button></div>
+  <div class="attribution"><a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a></div>
+
+  <div class="nav">
+    <button class="active" id="mapTab"><span class="ico">⌖</span><span>Map</span></button>
+    <button id="reportsTab"><span class="ico">▤</span><span>Reports</span></button>
+    <button class="add" id="addBtn" aria-label="Add report">＋</button>
+    <button id="filterBtn"><span class="ico">◇</span><span>Filter</span></button>
+    <button id="infoBtn"><span class="ico">ⓘ</span><span>About</span></button>
+  </div>
+
+  <div class="sheet" id="addSheet">
+    <div class="grab"></div><div class="sheetHead"><h2>New report</h2><button class="close" data-close="addSheet">×</button></div>
+    <p class="sub">Place the map center over the location, choose a category, and add a short description. Reports on this prototype stay on this phone.</p>
+    <div class="cats" id="catGrid"></div>
+    <div class="field"><label>Title</label><input id="reportTitle" maxlength="60" placeholder="Short, factual title" /></div>
+    <div class="field"><label>Details</label><textarea id="reportDetails" maxlength="280" placeholder="What was observed? Avoid names or private personal information."></textarea></div>
+    <div class="coord" id="coordText">⌖ Map center</div>
+    <button class="primary" id="saveReport">Save report at map center</button>
+    <div class="dangerNote"><b>Community reports are unverified.</b> Do not use this app as an emergency service or to confront people. For immediate danger, contact your local emergency services.</div>
+  </div>
+
+  <div class="sheet" id="reportsSheet">
+    <div class="grab"></div><div class="sheetHead"><h2>Nearby reports</h2><button class="close" data-close="reportsSheet">×</button></div>
+    <p class="sub" id="reportScopeText">Showing reports around the current map area.</p><div id="reportList"></div>
+  </div>
+
+  <div class="sheet" id="filterSheet">
+    <div class="grab"></div><div class="sheetHead"><h2>Filters</h2><button class="close" data-close="filterSheet">×</button></div>
+    <p class="sub">Choose what appears on the map. This prototype does not claim any report is verified.</p><div class="cats" id="filterGrid"></div>
+  </div>
+
+  <div class="sheet" id="detailSheet">
+    <div class="grab"></div><div class="sheetHead"><h2 id="detailTitle">Report</h2><button class="close" data-close="detailSheet">×</button></div>
+    <div id="detailBody"></div>
+  </div>
+
+  <div class="sheet" id="infoSheet">
+    <div class="grab"></div><div class="sheetHead"><h2>About AreaPulse</h2><button class="close" data-close="infoSheet">×</button></div>
+    <p class="sub">A map-first prototype for community incident and paranormal reports. The visual direction is inspired by modern social maps: bold floating controls, a map-first home screen and compact bottom navigation.</p>
+    <div class="reportCard"><span class="tag">Prototype</span><h3>What works now</h3><p>Interactive worldwide map tiles, explicit place search, Country/County/City/Zone zoom scopes, report categories, local report creation, filtering, saved local data and responsive phone/tablet layout.</p></div>
+    <div class="reportCard"><span class="tag">Privacy</span><h3>No background tracking</h3><p>This build never tracks in the background. Location permission is requested only if you tap the location button, and you can keep using search or the map without granting it.</p></div>
+    <div class="reportCard"><span class="tag">Data</span><h3>No live backend yet</h3><p>Your reports are stored only in this app on this device. A real multi-user release needs authentication, moderation, abuse controls and a backend before reports can be shared publicly.</p></div>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+<script src="app.js"></script>
+
+</body>
+</html>
