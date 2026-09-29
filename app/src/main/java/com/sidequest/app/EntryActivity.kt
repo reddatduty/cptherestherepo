@@ -19,7 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -40,10 +40,10 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 
-private val EntryInk = Color(0xFF111217)
+private val EntryInk = Color(0xFF111216)
 private val EntryMuted = Color(0xFF747984)
-private val EntryBlue = Color(0xFF536DFF)
-private val EntrySurface = Color(0xFFF9FAFC)
+private val EntryAccent = Color(0xFF6C5CE7)
+private val EntryBg = Color(0xFFF5F6F8)
 
 class EntryActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,8 +59,8 @@ class EntryActivity : ComponentActivity() {
         setContent {
             MaterialTheme(
                 colorScheme = lightColorScheme(
-                    primary = EntryBlue,
-                    background = EntrySurface,
+                    primary = EntryAccent,
+                    background = EntryBg,
                     surface = Color.White
                 )
             ) {
@@ -76,7 +76,6 @@ class EntryActivity : ComponentActivity() {
     }
 
     private fun openMap() {
-        getSharedPreferences("sidequest", 0).edit().putBoolean("intro", true).apply()
         startActivity(Intent(this, MainActivity::class.java))
         finish()
     }
@@ -91,39 +90,47 @@ private fun EntryScreen(onAuthenticated: () -> Unit, onGuest: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
 
-    Box(Modifier.fillMaxSize().background(EntrySurface)) {
-        EntryMapBackground()
-        Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.10f)))
+    Box(Modifier.fillMaxSize().background(EntryBg)) {
+        EntryMapBackground(Modifier.fillMaxWidth().height(390.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(390.dp)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Transparent, EntryBg.copy(alpha = 0.20f), EntryBg)
+                    )
+                )
+        )
 
         Surface(
             modifier = Modifier
-                .padding(start = 18.dp, top = 52.dp)
+                .statusBarsPadding()
+                .padding(start = 18.dp, top = 12.dp)
                 .align(Alignment.TopStart),
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(20.dp),
             color = Color.White.copy(alpha = 0.94f),
-            shadowElevation = 10.dp
+            shadowElevation = 8.dp
         ) {
             Row(
-                Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
+                Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(Modifier.size(28.dp), shape = CircleShape, color = EntryInk) {
+                Surface(Modifier.size(29.dp), shape = CircleShape, color = EntryInk) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.Explore, null, tint = Color.White, modifier = Modifier.size(17.dp))
                     }
                 }
-                Spacer(Modifier.width(9.dp))
+                Spacer(Modifier.width(8.dp))
                 Text("sidequest", fontWeight = FontWeight.Black, fontSize = 16.sp, color = EntryInk)
             }
         }
 
         Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth(),
-            shape = RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
             color = Color.White,
-            shadowElevation = 24.dp
+            shadowElevation = 20.dp
         ) {
             Column(
                 Modifier
@@ -133,32 +140,29 @@ private fun EntryScreen(onAuthenticated: () -> Unit, onGuest: () -> Unit) {
                     .padding(horizontal = 22.dp, vertical = 22.dp)
             ) {
                 Text(
-                    "Your area, on one map.",
-                    fontSize = 29.sp,
-                    lineHeight = 31.sp,
+                    "See what’s happening nearby.",
+                    fontSize = 31.sp,
+                    lineHeight = 34.sp,
                     fontWeight = FontWeight.Black,
                     color = EntryInk
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Local incidents, unusual reports and documented places — clearly sourced.",
+                    "Search places, check current local coverage and save spots you want to revisit.",
                     color = EntryMuted,
                     fontSize = 14.sp,
                     lineHeight = 20.sp
                 )
 
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(18.dp))
 
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFFF0F2F6)
-                ) {
+                Surface(shape = RoundedCornerShape(15.dp), color = Color(0xFFF1F2F5)) {
                     Row(Modifier.padding(4.dp)) {
-                        ModeButton("Sign in", !createMode, Modifier.weight(1f)) {
+                        EntryModeButton("Sign in", !createMode, Modifier.weight(1f)) {
                             createMode = false
                             note = null
                         }
-                        ModeButton("Create account", createMode, Modifier.weight(1f)) {
+                        EntryModeButton("Create account", createMode, Modifier.weight(1f)) {
                             createMode = true
                             note = null
                         }
@@ -169,7 +173,7 @@ private fun EntryScreen(onAuthenticated: () -> Unit, onGuest: () -> Unit) {
 
                 OutlinedTextField(
                     value = email,
-                    onValueChange = { email = it },
+                    onValueChange = { email = it; note = null },
                     modifier = Modifier.fillMaxWidth(),
                     leadingIcon = { Icon(Icons.Rounded.Mail, null) },
                     placeholder = { Text("Email") },
@@ -182,7 +186,7 @@ private fun EntryScreen(onAuthenticated: () -> Unit, onGuest: () -> Unit) {
 
                 OutlinedTextField(
                     value = password,
-                    onValueChange = { password = it },
+                    onValueChange = { password = it; note = null },
                     modifier = Modifier.fillMaxWidth(),
                     leadingIcon = { Icon(Icons.Rounded.Lock, null) },
                     placeholder = { Text("Password") },
@@ -191,20 +195,26 @@ private fun EntryScreen(onAuthenticated: () -> Unit, onGuest: () -> Unit) {
                     shape = RoundedCornerShape(17.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
-                        if (!busy) submitAuth(createMode, email, password, scope, { busy = it }, { note = it }, onAuthenticated)
+                        if (!busy) submitEntryAuth(
+                            createMode, email, password, scope,
+                            { busy = it }, { note = it }, onAuthenticated
+                        )
                     })
                 )
 
                 note?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Text(it, color = if (it.startsWith("Firebase")) Color(0xFFB35A00) else Color(0xFFB3261E), fontSize = 12.sp)
+                    Spacer(Modifier.height(9.dp))
+                    Text(it, color = Color(0xFFB3261E), fontSize = 12.sp, lineHeight = 16.sp)
                 }
 
                 Spacer(Modifier.height(14.dp))
 
                 Button(
                     onClick = {
-                        submitAuth(createMode, email, password, scope, { busy = it }, { note = it }, onAuthenticated)
+                        submitEntryAuth(
+                            createMode, email, password, scope,
+                            { busy = it }, { note = it }, onAuthenticated
+                        )
                     },
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -221,16 +231,7 @@ private fun EntryScreen(onAuthenticated: () -> Unit, onGuest: () -> Unit) {
                 }
 
                 TextButton(onClick = onGuest, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Text("Explore without an account", color = EntryMuted, fontWeight = FontWeight.SemiBold)
-                }
-
-                if (!FirebaseBootstrap.isConfigured) {
-                    Text(
-                        "Firebase project config is not in this build yet.",
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                        color = Color(0xFF8D5A00),
-                        fontSize = 11.sp
-                    )
+                    Text("Continue without an account", color = EntryMuted, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -238,12 +239,12 @@ private fun EntryScreen(onAuthenticated: () -> Unit, onGuest: () -> Unit) {
 }
 
 @Composable
-private fun ModeButton(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun EntryModeButton(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     if (selected) {
         Surface(
             modifier = modifier,
             onClick = onClick,
-            shape = RoundedCornerShape(13.dp),
+            shape = RoundedCornerShape(12.dp),
             color = Color.White,
             shadowElevation = 2.dp
         ) {
@@ -258,7 +259,7 @@ private fun ModeButton(label: String, selected: Boolean, modifier: Modifier, onC
     }
 }
 
-private fun submitAuth(
+private fun submitEntryAuth(
     createMode: Boolean,
     email: String,
     password: String,
@@ -268,7 +269,7 @@ private fun submitAuth(
     onAuthenticated: () -> Unit
 ) {
     if (email.isBlank() || !email.contains("@")) {
-        setNote("Enter a valid email.")
+        setNote("Enter a valid email address.")
         return
     }
     if (password.length < 6) {
@@ -276,7 +277,7 @@ private fun submitAuth(
         return
     }
     if (!FirebaseBootstrap.ready()) {
-        setNote("Firebase project config is missing from this build.")
+        setNote("Firebase isn’t connected to this build yet.")
         return
     }
 
@@ -290,14 +291,26 @@ private fun submitAuth(
         }.onSuccess {
             if (it != null) onAuthenticated()
         }.onFailure {
-            setNote(it.message ?: "Authentication failed.")
+            setNote(friendlyAuthError(it))
         }
         setBusy(false)
     }
 }
 
+private fun friendlyAuthError(error: Throwable): String {
+    val raw = error.message.orEmpty().lowercase()
+    return when {
+        "email address is already in use" in raw || "email-already-in-use" in raw -> "An account already exists for this email."
+        "password is invalid" in raw || "invalid credential" in raw || "wrong-password" in raw -> "Email or password is incorrect."
+        "no user record" in raw || "user-not-found" in raw -> "No account exists for this email."
+        "network" in raw -> "Couldn’t reach Firebase. Check your internet connection."
+        "too many" in raw -> "Too many attempts. Try again later."
+        else -> error.message ?: "Authentication failed."
+    }
+}
+
 @Composable
-private fun EntryMapBackground() {
+private fun EntryMapBackground(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val mapView = remember {
@@ -315,7 +328,7 @@ private fun EntryMapBackground() {
                 }
                 map.cameraPosition = CameraPosition.Builder()
                     .target(LatLng(45.94, 24.97))
-                    .zoom(5.6)
+                    .zoom(5.8)
                     .build()
                 map.setStyle(Style.Builder().fromUri("https://tiles.openfreemap.org/styles/liberty"))
             }
@@ -340,8 +353,5 @@ private fun EntryMapBackground() {
         }
     }
 
-    AndroidView(
-        factory = { mapView },
-        modifier = Modifier.fillMaxSize()
-    )
+    AndroidView(factory = { mapView }, modifier = modifier)
 }
