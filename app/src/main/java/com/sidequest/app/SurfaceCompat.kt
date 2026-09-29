@@ -1,6 +1,5 @@
 package com.sidequest.app
 
-import androidx.compose.foundation.shape.RectangleShape
 import androidx.compose.material3.Surface as MaterialSurface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -14,7 +13,7 @@ import androidx.compose.ui.unit.dp
 internal fun Surface(
     modifier: Modifier,
     onClick: () -> Unit,
-    shape: Shape = RectangleShape,
+    shape: Shape,
     color: Color = Color.Unspecified,
     shadowElevation: Dp = 0.dp,
     content: @Composable () -> Unit
