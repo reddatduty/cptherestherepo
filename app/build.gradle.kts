@@ -4,6 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.sidequest.app"
     compileSdk = 36
@@ -12,8 +16,8 @@ android {
         applicationId = "com.sidequest.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.9.0-native"
+        versionCode = 11
+        versionName = "1.1.0-firebase-v11"
     }
 
     buildFeatures { compose = true }
@@ -48,9 +52,15 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:5.1.0")
     implementation("io.coil-kt.coil3:coil-compose:3.3.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
     implementation("org.maplibre.gl:android-sdk:13.3.1")
+
+    implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

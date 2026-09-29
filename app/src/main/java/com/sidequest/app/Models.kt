@@ -40,9 +40,18 @@ data class DiscoverFeed(
     val generatedAt:String = ""
 )
 
-data class Session(
-    val accessToken:String,
-    val refreshToken:String?,
-    val userId:String,
+data class Account(
+    val uid:String,
     val email:String
+)
+
+data class CommunityReport(
+    val id:String="",
+    val uid:String="",
+    val category:String="other",
+    val title:String="",
+    val details:String="",
+    val lat:Double=0.0,
+    val lon:Double=0.0,
+    val createdAtMillis:Long=0L
 )
