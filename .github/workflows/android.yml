@@ -3,17 +3,13 @@ name: Android build
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, native-v09 ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate sidequest JavaScript
-        run: |
-          node --check app/src/main/assets/v07.js
-          node --check app/src/main/assets/v08-cloud.js
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -28,10 +24,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Build debug APK
+      - name: Build native debug APK
         run: gradle :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: sidequest-debug-apk
+          name: sidequest-native-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
