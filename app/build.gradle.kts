@@ -16,8 +16,8 @@ android {
         applicationId = "com.sidequest.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.1.0-firebase-v11"
+        versionCode = 12
+        versionName = "1.2.0-firebase-v12"
     }
 
     buildFeatures { compose = true }
@@ -61,6 +61,10 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
+
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
