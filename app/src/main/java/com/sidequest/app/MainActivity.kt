@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.CancellationSignal
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -168,7 +169,7 @@ private fun MapScreen(session:Session?,onLogout:()->Unit){
 private fun NativeMap(center:LatLng,zoom:Double,markers:List<MapPlace>,styleName:String,onMapReady:(MapLibreMap)->Unit,onCameraIdle:(Double,Double,Double)->Unit){
     val context=LocalContext.current;val lifecycle=LocalLifecycleOwner.current.lifecycle;val view=remember{MapView(context).apply{onCreate(Bundle())}};var map by remember{mutableStateOf<MapLibreMap?>(null)}
     DisposableEffect(lifecycle,view){val o=LifecycleEventObserver{_,e->when(e){Lifecycle.Event.ON_START->view.onStart();Lifecycle.Event.ON_RESUME->view.onResume();Lifecycle.Event.ON_PAUSE->view.onPause();Lifecycle.Event.ON_STOP->view.onStop();Lifecycle.Event.ON_DESTROY->view.onDestroy();else->Unit}};lifecycle.addObserver(o);onDispose{lifecycle.removeObserver(o)}}
-    AndroidView(factory={view},modifier=Modifier.fillMaxSize()){v->if(map==null)v.getMapAsync{m->map=m;m.uiSettings.isLogoEnabled=false;m.cameraPosition=CameraPosition.Builder().target(center).zoom(zoom).build();m.setStyle(Style.Builder().fromUri(styleUri(styleName)));m.addOnCameraIdleListener{val c=m.cameraPosition.target;onCameraIdle(c.latitude,c.longitude,m.cameraPosition.zoom)};onMapReady(m)}}
+    AndroidView(factory={view},modifier=Modifier.fillMaxSize()){v->if(map==null)v.getMapAsync{m->map=m;m.uiSettings.isLogoEnabled=false;m.cameraPosition=CameraPosition.Builder().target(center).zoom(zoom).build();m.setStyle(Style.Builder().fromUri(styleUri(styleName)));m.addOnCameraIdleListener{m.cameraPosition.target?.let{c->onCameraIdle(c.latitude,c.longitude,m.cameraPosition.zoom)}};onMapReady(m)}}
     LaunchedEffect(markers,map){map?.let{m->m.clear();markers.take(120).forEach{p->m.addMarker(MarkerOptions().position(LatLng(p.lat,p.lon)).title(p.title).snippet(p.source))}}}
 }
 
