@@ -11,7 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate sidequest JavaScript
-        run: node --check app/src/main/assets/v07.js
+        run: |
+          node --check app/src/main/assets/v07.js
+          node --check app/src/main/assets/v08-cloud.js
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
