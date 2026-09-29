@@ -1,8 +1,15 @@
 package com.sidequest.app
 
+import android.app.Activity
 import android.content.Context
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -21,22 +28,58 @@ object FirebaseBackend {
         return Account(user.uid, user.email.orEmpty())
     }
 
+    fun googleClientId(context: Context): String? {
+        if (!isConfigured(context)) return null
+        val id = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+        if (id == 0) return null
+        return runCatching { context.getString(id) }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
     suspend fun signIn(context: Context, email: String, password: String): Account {
         requireConfigured(context)
-        val result = FirebaseAuth.getInstance()
-            .signInWithEmailAndPassword(email, password)
-            .await()
+        val result = FirebaseAuth.getInstance().signInWithEmailAndPassword(email, password).await()
         val user = result.user ?: error("Firebase did not return a user")
         return Account(user.uid, user.email.orEmpty())
     }
 
     suspend fun signUp(context: Context, email: String, password: String): Account {
         requireConfigured(context)
-        val result = FirebaseAuth.getInstance()
-            .createUserWithEmailAndPassword(email, password)
-            .await()
+        val result = FirebaseAuth.getInstance().createUserWithEmailAndPassword(email, password).await()
         val user = result.user ?: error("Firebase did not return a user")
         return Account(user.uid, user.email.orEmpty())
+    }
+
+    suspend fun signInWithGoogle(activity: Activity): Account {
+        requireConfigured(activity)
+        val serverClientId = googleClientId(activity)
+            ?: error("Google sign-in is not enabled for this Firebase app yet")
+
+        val option = GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false)
+            .setServerClientId(serverClientId)
+            .setAutoSelectEnabled(false)
+            .build()
+
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(option)
+            .build()
+
+        val result = CredentialManager.create(activity).getCredential(activity, request)
+        val credential = result.credential
+        if (credential !is CustomCredential || credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+            error("Google did not return a valid credential")
+        }
+
+        val google = GoogleIdTokenCredential.createFrom(credential.data)
+        val firebaseCredential = GoogleAuthProvider.getCredential(google.idToken, null)
+        val authResult = FirebaseAuth.getInstance().signInWithCredential(firebaseCredential).await()
+        val user = authResult.user ?: error("Firebase did not return a user")
+        return Account(user.uid, user.email.orEmpty())
+    }
+
+    suspend fun sendPasswordReset(context: Context, email: String) {
+        requireConfigured(context)
+        FirebaseAuth.getInstance().sendPasswordResetEmail(email).await()
     }
 
     fun signOut(context: Context) {
@@ -57,6 +100,7 @@ object FirebaseBackend {
                     "subtitle" to place.subtitle,
                     "latitude" to place.lat,
                     "longitude" to place.lon,
+                    "image" to place.image,
                     "source" to place.source,
                     "kind" to place.kind,
                     "savedAt" to FieldValue.serverTimestamp()
@@ -117,7 +161,7 @@ object FirebaseBackend {
 
     private fun requireConfigured(context: Context) {
         if (!isConfigured(context)) {
-            error("Firebase is not connected yet. Add app/google-services.json.")
+            error("Firebase is not connected. Add app/google-services.json and enable Authentication providers in Firebase Console.")
         }
     }
 }
