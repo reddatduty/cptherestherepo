@@ -58,7 +58,7 @@ public class MainActivity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setUserAgentString(settings.getUserAgentString() + " sidequest/0.7");
+        settings.setUserAgentString(settings.getUserAgentString() + " sidequest/0.8");
 
         setContentView(webView);
         webView.loadUrl(START_URL);
