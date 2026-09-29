@@ -3,7 +3,7 @@ name: Android build
 on:
   workflow_dispatch:
   push:
-    branches: [ main, native-v09, firebase-v10, firebase-v11-clean-ui ]
+    branches: [ main, native-v09, firebase-v10, firebase-v11-clean-ui, firebase-v12 ]
 
 jobs:
   build:
@@ -24,10 +24,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Build Firebase V11 debug APK
+      - name: Build Firebase V12 debug APK
         run: gradle :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: sidequest-firebase-v11-debug-apk
+          name: sidequest-firebase-v12-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
