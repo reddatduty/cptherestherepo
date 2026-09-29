@@ -37,7 +37,7 @@
 <div id="authGate">
   <button id="authBack" class="authBack" style="display:none">‹</button>
   <div id="authHome">
-    <div class="authLogo">S</div><h1 class="authGateTitle">Join sidequest!</h1><p class="authGateSub">Choose how you want to connect. Your account will keep saved places and reports synced when the cloud backend is enabled.</p>
+    <div class="authLogo">S</div><h1 class="authGateTitle">Join sidequest!</h1><p class="authGateSub">Choose how you want to connect. Your account keeps saved places and reports synced securely across devices.</p>
     <div class="authChoices">
       <button id="googleAuth" class="authChoice"><span class="provider">G</span>Continue with Google</button>
       <button id="phoneAuth" class="authChoice"><span class="provider">#</span>Continue with phone number</button>
@@ -48,7 +48,7 @@
     <p class="authFine">By continuing you agree to follow local laws, respect private property, and avoid posting personal information about other people.</p>
   </div>
   <div id="emailForm" class="authForm"><div class="authLogo">@</div><h1 class="authGateTitle">Email account</h1><p class="authGateSub">Sign in or create a sidequest! account with email.</p><input id="authEmail" type="email" placeholder="Email address"><input id="authPassword" type="password" placeholder="Password"><button id="emailSignIn" class="primaryBtn">Sign in</button><button id="emailCreate" class="softBtn">Create account</button></div>
-  <div id="phoneForm" class="authForm"><div class="authLogo">#</div><h1 class="authGateTitle">Your phone number</h1><p class="authGateSub">We'll send a verification code when phone auth is connected.</p><div class="phoneRow"><select id="countryCode"><option>+40</option><option>+44</option><option>+49</option><option>+33</option><option>+39</option><option>+34</option><option>+1</option></select><input id="authPhone" inputmode="tel" placeholder="712 345 678"></div><button id="phoneContinue" class="primaryBtn">Continue</button></div>
+  <div id="phoneForm" class="authForm"><div class="authLogo">#</div><h1 class="authGateTitle">Your phone number</h1><p class="authGateSub">Phone sign-in needs an SMS provider, so it is unavailable in the free-only setup.</p><div class="phoneRow"><select id="countryCode"><option>+40</option><option>+44</option><option>+49</option><option>+33</option><option>+39</option><option>+34</option><option>+1</option></select><input id="authPhone" inputmode="tel" placeholder="712 345 678"></div><button id="phoneContinue" class="primaryBtn">Continue</button></div>
 </div>
 
-<script src="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.js"></script><script src="v07.js"></script></body></html>
+<script src="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script><script src="v07.js"></script><script src="v08-cloud.js"></script></body></html>
