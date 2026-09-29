@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate app JavaScript
-        run: node --check app/src/main/assets/app.js
+      - name: Validate sidequest JavaScript
+        run: node --check app/src/main/assets/v07.js
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
