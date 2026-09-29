@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "AreaPulse"
+rootProject.name = "sidequest"
 include(":app")

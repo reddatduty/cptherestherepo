@@ -1,4 +1,4 @@
-package com.areapulse.app;
+package com.sidequest.app;
 
 import android.Manifest;
 import android.app.Activity;
@@ -31,7 +31,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         webView = new WebView(this);
-        webView.setBackgroundColor(0xFFF4F6FA);
+        webView.setBackgroundColor(0xFF0B1020);
         webView.setWebViewClient(new LocalAssetClient());
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -65,7 +65,7 @@ public class MainActivity extends Activity {
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " AreaPulse/0.3");
+        settings.setUserAgentString(settings.getUserAgentString() + " sidequest/0.4");
 
         setContentView(webView);
         webView.loadUrl(START_URL);
@@ -130,7 +130,6 @@ public class MainActivity extends Activity {
             try {
                 startActivity(intent);
             } catch (Exception ignored) {
-                // Ignore if no external app can handle the URL.
             }
             return true;
         }
