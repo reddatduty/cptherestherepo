@@ -31,30 +31,22 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         webView = new WebView(this);
-        webView.setBackgroundColor(0xFFDCE5F4);
+        webView.setBackgroundColor(0xFFDCE8F7);
         webView.setWebViewClient(new LocalAssetClient());
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
-            public void onGeolocationPermissionsShowPrompt(
-                    String origin,
-                    GeolocationPermissions.Callback callback) {
+            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
                 if (!origin.startsWith("https://" + APP_HOST)) {
                     callback.invoke(origin, false, false);
                     return;
                 }
-
-                if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
-                        == PackageManager.PERMISSION_GRANTED) {
+                if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     callback.invoke(origin, true, false);
                     return;
                 }
-
                 pendingOrigin = origin;
                 pendingGeoCallback = callback;
-                requestPermissions(new String[]{
-                        Manifest.permission.ACCESS_COARSE_LOCATION,
-                        Manifest.permission.ACCESS_FINE_LOCATION
-                }, LOCATION_REQUEST);
+                requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_REQUEST);
             }
         });
 
@@ -66,7 +58,7 @@ public class MainActivity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setUserAgentString(settings.getUserAgentString() + " sidequest/0.5");
+        settings.setUserAgentString(settings.getUserAgentString() + " sidequest/0.7");
 
         setContentView(webView);
         webView.loadUrl(START_URL);
@@ -76,8 +68,7 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == LOCATION_REQUEST && pendingGeoCallback != null && pendingOrigin != null) {
-            boolean granted = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
-                    == PackageManager.PERMISSION_GRANTED;
+            boolean granted = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
             pendingGeoCallback.invoke(pendingOrigin, granted, false);
             pendingGeoCallback = null;
             pendingOrigin = null;
@@ -86,11 +77,8 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
-        }
+        if (webView != null && webView.canGoBack()) webView.goBack();
+        else super.onBackPressed();
     }
 
     @Override
@@ -124,14 +112,9 @@ public class MainActivity extends Activity {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             Uri uri = request.getUrl();
-            if ("https".equals(uri.getScheme()) && APP_HOST.equals(uri.getHost())) {
-                return false;
-            }
+            if ("https".equals(uri.getScheme()) && APP_HOST.equals(uri.getHost())) return false;
             Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-            try {
-                startActivity(intent);
-            } catch (Exception ignored) {
-            }
+            try { startActivity(intent); } catch (Exception ignored) {}
             return true;
         }
     }
