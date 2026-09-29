@@ -3,28 +3,127 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-  <meta name="theme-color" content="#0b1020" />
+  <meta name="theme-color" content="#dfe8ff" />
   <title>sidequest!</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="app.css" />
 </head>
 <body>
 <div id="splash" aria-label="Loading sidequest">
-  <div class="splashInner"><div class="orb"><span class="sat"></span><div class="core">S</div></div><div class="splashTitle">sidequest!</div><div class="splashSub">discover what is around you</div><div class="dots"><i></i><i></i><i></i></div></div>
+  <div class="splash-orbit"><span></span><i></i><b>S</b></div>
+  <div class="splash-word">sidequest!</div>
+  <div class="splash-sub">explore what is around you</div>
 </div>
+
 <div id="app">
-  <div id="map"><div id="tiles"></div><div id="markers"></div></div>
-  <header class="top"><div class="logoChip glass"><div class="logoMark">S</div><div>sidequest!<small>LIVE MAP</small></div></div><form class="search glass" id="searchForm"><input id="searchInput" placeholder="Search city, county or place" autocomplete="off" /><button class="iconBtn" type="submit">⌕</button><div class="searchBox glass" id="searchResults"></div></form></header>
-  <div class="chips"><button class="chip active" data-filter="all">All</button><button class="chip" data-filter="public">Ruins</button><button class="chip" data-filter="paranormal">Paranormal</button><button class="chip" data-filter="safety">Safety</button><button class="chip" data-filter="mystery">Mystery</button></div>
-  <div class="statusPill glass" id="statusPill">Romania · move the map or search</div>
-  <div class="mapBtns"><button class="mapBtn" id="locationBtn" aria-label="My location">⌖</button><button class="mapBtn" id="scopeBtn" aria-label="Map scope">◎</button><button class="mapBtn" id="zoomIn" aria-label="Zoom in">＋</button><button class="mapBtn" id="zoomOut" aria-label="Zoom out">−</button><button class="mapBtn" id="refreshLive" aria-label="Refresh public data">↻</button></div>
-  <div class="centerCard glass"><div class="centerIcon">✦</div><div class="centerText"><b id="centerName">Romania</b><span id="centerCoords">45.9432, 24.9668</span></div><button class="primarySmall" id="saveCenter">Save</button></div>
-  <nav class="bottomNav glass"><button class="navBtn active" id="navExplore"><span class="ico">⌖</span>Explore</button><button class="navBtn" id="navSaved"><span class="ico">♡</span>Saved</button><button class="navBtn" id="navReport"><span class="ico">＋</span>Report</button><button class="navBtn" id="navProfile"><span class="ico">◉</span>Profile</button></nav>
-  <section class="sheet" id="scopeSheet"><div class="handle"></div><div class="sheetHead"><div><h2>Map scope</h2><p class="sub">Choose how wide an area you want to explore.</p></div><button class="close" data-close="scopeSheet">×</button></div><div class="grid"><button class="card selected" data-scope="country"><strong>Country</strong><span>Wide overview</span></button><button class="card" data-scope="county"><strong>County</strong><span>Regional view</span></button><button class="card" data-scope="city"><strong>City</strong><span>City and outskirts</span></button><button class="card" data-scope="zone"><strong>Zone</strong><span>Street-level area</span></button></div></section>
-  <section class="sheet" id="savedSheet"><div class="handle"></div><div class="sheetHead"><div><h2>Saved places</h2><p class="sub">Locations stored on this device.</p></div><button class="close" data-close="savedSheet">×</button></div><div class="list" id="savedList"></div></section>
-  <section class="sheet" id="reportSheet"><div class="handle"></div><div class="sheetHead"><div><h2>Add a report</h2><p class="sub">Community reports are unverified until reviewed.</p></div><button class="close" data-close="reportSheet">×</button></div><div class="grid" id="reportCats"></div><div class="field"><label>Title</label><input id="reportTitle" maxlength="80" placeholder="What did you notice?" /></div><div class="field"><label>Details</label><textarea id="reportDetails" maxlength="600" placeholder="Short, factual description. Do not post private information."></textarea></div><div class="dangerNote">For abandoned or restricted places, sidequest! does not provide entry instructions. Stay in public areas and follow local rules.</div><button class="primary" id="submitReport">Save report</button></section>
-  <section class="sheet" id="profileSheet"><div class="handle"></div><div class="sheetHead"><div><h2>Profile</h2><p class="sub">Local account now; cloud sync is backend-ready.</p></div><button class="close" data-close="profileSheet">×</button></div><div id="profileContent"></div></section>
-  <section class="sheet" id="detailSheet"><div class="handle"></div><div class="sheetHead"><div><h2 id="detailTitle">Place</h2><p class="sub" id="detailSub"></p></div><button class="close" data-close="detailSheet">×</button></div><div id="detailBody"></div></section>
-  <div class="attribution"><a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a></div><div class="toast" id="toast"></div>
+  <div id="map"></div>
+  <div id="accuracyRing" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <button class="brandGlass" id="brandBtn" aria-label="Sidequest profile"><span class="brandIcon">S</span><span class="brandText">sidequest!</span></button>
+    <form class="searchGlass" id="searchForm">
+      <span class="searchGlyph">⌕</span>
+      <input id="searchInput" autocomplete="off" placeholder="Search a place" />
+      <button class="roundMini" type="button" id="clearSearch" aria-label="Clear search">×</button>
+      <div class="searchResults" id="searchResults"></div>
+    </form>
+  </header>
+
+  <div class="mapTools">
+    <button class="glassIcon" id="locationBtn" aria-label="My location">⌖</button>
+    <button class="glassIcon" id="layersBtn" aria-label="Map and filters">◫</button>
+  </div>
+
+  <div class="gpsPill glass" id="gpsPill" hidden>GPS · —</div>
+  <div class="mapHint glass" id="mapHint">Move the map to explore</div>
+
+  <nav class="dock glass">
+    <button class="dockBtn active" id="navExplore"><span>⌖</span><small>Explore</small></button>
+    <button class="dockBtn" id="navSaved"><span>♡</span><small>Saved</small></button>
+    <button class="dockBtn addBtn" id="navReport" aria-label="New report"><span>＋</span></button>
+    <button class="dockBtn" id="navSettings"><span>⚙</span><small>Settings</small></button>
+  </nav>
+
+  <section class="sheet" id="layersSheet">
+    <div class="handle"></div>
+    <div class="sheetHead"><div><h2>Map</h2><p>Style, scope and visible layers.</p></div><button class="close" data-close="layersSheet">×</button></div>
+    <div class="sectionLabel">MAP STYLE</div>
+    <div class="segmented" id="mapStyleControl">
+      <button data-style="liberty" class="selected">Soft</button><button data-style="positron">Light</button><button data-style="dark">Dark</button>
+    </div>
+    <div class="sectionLabel">AREA</div>
+    <div class="segmented" id="scopeControl">
+      <button data-scope="country">Country</button><button data-scope="county">County</button><button data-scope="city" class="selected">City</button><button data-scope="zone">Zone</button>
+    </div>
+    <div class="sectionLabel">SHOW</div>
+    <div class="settingRow"><div><b>Public ruins & abandoned</b><span>OpenStreetMap / Overpass public map data</span></div><label class="switch"><input id="togglePublic" type="checkbox" checked><i></i></label></div>
+    <div class="settingRow"><div><b>Community reports</b><span>Unverified user-submitted reports</span></div><label class="switch"><input id="toggleCommunity" type="checkbox" checked><i></i></label></div>
+    <button class="softButton" id="refreshPublic">Refresh nearby public places</button>
+  </section>
+
+  <section class="sheet" id="savedSheet">
+    <div class="handle"></div>
+    <div class="sheetHead"><div><h2>Saved</h2><p>Your places on this device.</p></div><button class="close" data-close="savedSheet">×</button></div>
+    <button class="primaryButton" id="saveCenter">Save current map center</button>
+    <div class="list" id="savedList"></div>
+  </section>
+
+  <section class="sheet" id="reportSheet">
+    <div class="handle"></div>
+    <div class="sheetHead"><div><h2>New report</h2><p>Saved locally in this build. Community reports are unverified.</p></div><button class="close" data-close="reportSheet">×</button></div>
+    <div class="reportKinds" id="reportCats"></div>
+    <label class="field"><span>Title</span><input id="reportTitle" maxlength="80" placeholder="What did you notice?" /></label>
+    <label class="field"><span>Details</span><textarea id="reportDetails" maxlength="600" placeholder="Short, factual description. Do not post private information."></textarea></label>
+    <div class="notice">For abandoned or restricted places, sidequest! does not provide entry instructions. Stay in public areas and follow local rules.</div>
+    <button class="primaryButton" id="submitReport">Save report at map center</button>
+  </section>
+
+  <section class="sheet" id="settingsSheet">
+    <div class="handle"></div>
+    <div class="sheetHead"><div><h2>Settings</h2><p>These settings persist on this device.</p></div><button class="close" data-close="settingsSheet">×</button></div>
+
+    <div class="settingsGroup">
+      <h3>Location</h3>
+      <div class="settingRow"><div><b>Location accuracy</b><span>High uses fresher GPS fixes; Balanced saves battery.</span></div><select id="locationAccuracy"><option value="balanced">Balanced</option><option value="high">High</option></select></div>
+      <div class="settingRow"><div><b>Remember map position</b><span>Restore the last map center next time.</span></div><label class="switch"><input id="rememberPosition" type="checkbox" checked><i></i></label></div>
+      <div class="settingRow"><div><b>Units</b><span>Distances shown throughout the app.</span></div><select id="units"><option value="metric">Metric</option><option value="imperial">Imperial</option></select></div>
+    </div>
+
+    <div class="settingsGroup">
+      <h3>Map & data</h3>
+      <div class="settingRow"><div><b>Auto-load public places</b><span>Refresh public ruins/abandoned map data after moving to a new area.</span></div><label class="switch"><input id="autoPublic" type="checkbox" checked><i></i></label></div>
+      <div class="settingRow"><div><b>Map style</b><span>Vector map rendered with MapLibre.</span></div><select id="settingsMapStyle"><option value="liberty">Soft</option><option value="positron">Light</option><option value="dark">Dark</option></select></div>
+      <div class="settingRow"><div><b>Reduce motion</b><span>Reduce transitions and splash movement.</span></div><label class="switch"><input id="reduceMotion" type="checkbox"><i></i></label></div>
+    </div>
+
+    <div class="settingsGroup">
+      <h3>Interaction</h3>
+      <div class="settingRow"><div><b>Haptics</b><span>Small vibration on important actions when supported.</span></div><label class="switch"><input id="haptics" type="checkbox" checked><i></i></label></div>
+      <div class="settingRow"><div><b>Interface language</b><span>Core navigation and settings.</span></div><select id="language"><option value="en">English</option><option value="ro">Română</option></select></div>
+    </div>
+
+    <div class="settingsGroup">
+      <h3>Privacy & storage</h3>
+      <div class="infoCard">Your location is used only when you tap the location button. sidequest! does not enable background location in this build.</div>
+      <button class="softButton" id="clearMapCache">Clear map/search cache</button>
+      <button class="dangerButton" id="resetApp">Reset local app data</button>
+    </div>
+
+    <div class="settingsGroup">
+      <h3>Account</h3>
+      <div id="accountBox"></div>
+    </div>
+
+    <div class="version">sidequest! 0.5 · Android 12–16</div>
+  </section>
+
+  <section class="sheet" id="detailSheet">
+    <div class="handle"></div>
+    <div class="sheetHead"><div><h2 id="detailTitle">Place</h2><p id="detailSub"></p></div><button class="close" data-close="detailSheet">×</button></div>
+    <div id="detailBody"></div>
+  </section>
+
+  <div class="toast" id="toast"></div>
 </div>
 <script src="app.js"></script>
 </body>
