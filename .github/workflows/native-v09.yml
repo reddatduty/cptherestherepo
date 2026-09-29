@@ -15,6 +15,14 @@ jobs:
           mkdir -p /tmp/sidequest-native
           cat .native-v09-bundle/*.b64 | base64 -d > /tmp/sidequest-native.tar.gz
           tar -xzf /tmp/sidequest-native.tar.gz -C /tmp/sidequest-native
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/sidequest-native/app/build.gradle.kts')
+          s=p.read_text()
+          s=s.replace('    kotlinOptions { jvmTarget = "17" }\n','')
+          s=s.replace('\n\ndependencies {','\n\nkotlin {\n    compilerOptions {\n        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17\n    }\n}\n\ndependencies {')
+          p.write_text(s)
+          PY
           find /tmp/sidequest-native -maxdepth 3 -type f | sort
       - uses: actions/setup-java@v5
         with:
