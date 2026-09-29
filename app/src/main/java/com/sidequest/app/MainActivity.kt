@@ -1,6 +1,7 @@
 package com.sidequest.app
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -11,7 +12,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -37,7 +37,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,140 +57,772 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 
-private val Ink=Color(0xFF11141B)
-private val Muted=Color(0xFF727B8B)
-private val Violet=Color(0xFF775BFF)
-private val Pink=Color(0xFFD75CFF)
-private val Danger=Color(0xFFFF6C76)
+private val HomeInk = Color(0xFF111216)
+private val HomeMuted = Color(0xFF747984)
+private val HomeAccent = Color(0xFF6C5CE7)
+private val HomeBg = Color(0xFFF6F7F9)
+private val HomeWarning = Color(0xFFF4A340)
 
-class MainActivity:ComponentActivity(){
-    override fun onCreate(savedInstanceState:Bundle?){
+private enum class HomeSheet { NONE, NEARBY, SETTINGS }
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         MapLibre.getInstance(this)
-        setContent{ MaterialTheme(colorScheme=lightColorScheme(primary=Violet,background=Color(0xFFF6F7FB),surface=Color.White)){ SidequestApp() } }
+
+        val store = SessionStore(this)
+        val session = store.load()
+        if (session == null) {
+            startActivity(Intent(this, EntryActivity::class.java))
+            finish()
+            return
+        }
+
+        setContent {
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = HomeAccent,
+                    background = HomeBg,
+                    surface = Color.White
+                )
+            ) {
+                SidequestHome(session = session, onLogout = { store.clear() })
+            }
+        }
     }
 }
 
-private enum class AppScreen{INTRO,AUTH,MAP}
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SidequestApp(){
-    val context=LocalContext.current
-    val store=remember{SessionStore(context)}
-    var session by remember{ mutableStateOf(store.load()) }
-    val introDone=context.getSharedPreferences("sidequest",0).getBoolean("intro",false)
-    var screen by remember{ mutableStateOf(if(session!=null) AppScreen.MAP else if(introDone) AppScreen.AUTH else AppScreen.INTRO) }
-    when(screen){
-        AppScreen.INTRO->IntroScreen{
-            context.getSharedPreferences("sidequest",0).edit().putBoolean("intro",true).apply();screen=AppScreen.AUTH
+private fun SidequestHome(session: Session, onLogout: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var center by remember { mutableStateOf(LatLng(45.9432, 24.9668)) }
+    var zoom by remember { mutableDoubleStateOf(6.0) }
+    var placeName by remember { mutableStateOf("Romania") }
+    var query by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<SearchPlace>>(emptyList()) }
+    var feed by remember { mutableStateOf(DiscoverFeed()) }
+    var loading by remember { mutableStateOf(false) }
+    var radius by remember { mutableIntStateOf(12) }
+    var windowHours by remember { mutableIntStateOf(24) }
+    var sheet by remember { mutableStateOf(HomeSheet.NONE) }
+    var selected by remember { mutableStateOf<MapPlace?>(null) }
+    var map by remember { mutableStateOf<MapLibreMap?>(null) }
+
+    val markers = remember(feed) { feed.places + feed.wikiPlaces }
+
+    fun refreshAt(
+        lat: Double = center.latitude,
+        lon: Double = center.longitude,
+        name: String = placeName,
+        openSheet: Boolean = false
+    ) {
+        loading = true
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    Api.discover(lat, lon, name, radius, windowHours, session)
+                }
+            }.onSuccess {
+                feed = it
+                if (openSheet) sheet = HomeSheet.NEARBY
+            }
+            loading = false
         }
-        AppScreen.AUTH->AuthScreen(onSession={store.save(it);session=it;screen=AppScreen.MAP},onPreview={screen=AppScreen.MAP})
-        AppScreen.MAP->MapScreen(session=session,onLogout={store.clear();session=null;screen=AppScreen.AUTH})
+    }
+
+    LaunchedEffect(Unit) { refreshAt() }
+
+    val locationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val fine = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarse = grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (fine || coarse) {
+            getCurrentLocation(context, fine) { lat, lon ->
+                center = LatLng(lat, lon)
+                zoom = 14.2
+                placeName = "Current area"
+                map?.animateCamera(CameraUpdateFactory.newLatLngZoom(center, zoom))
+                refreshAt(lat, lon, "Current area")
+            }
+        }
+    }
+
+    Box(Modifier.fillMaxSize().background(HomeBg)) {
+        NativeMap(
+            center = center,
+            zoom = zoom,
+            markers = markers,
+            onMapReady = { map = it },
+            onCameraIdle = { lat, lon, z ->
+                center = LatLng(lat, lon)
+                zoom = z
+            },
+            onMarker = { title -> selected = markers.firstOrNull { it.title == title } }
+        )
+
+        if (loading) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter),
+                color = HomeAccent
+            )
+        }
+
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .shadow(9.dp, RoundedCornerShape(23.dp)),
+                    shape = RoundedCornerShape(23.dp),
+                    color = Color.White.copy(alpha = 0.96f)
+                ) {
+                    TextField(
+                        value = query,
+                        onValueChange = {
+                            query = it
+                            if (it.isBlank()) results = emptyList()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search a city or place", color = HomeMuted) },
+                        leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                        trailingIcon = {
+                            if (query.isNotBlank()) {
+                                IconButton(onClick = { query = ""; results = emptyList() }) {
+                                    Icon(Icons.Rounded.Close, null)
+                                }
+                            }
+                        },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            if (query.length >= 2) {
+                                scope.launch {
+                                    results = runCatching {
+                                        withContext(Dispatchers.IO) { Api.searchPlaces(query.trim()) }
+                                    }.getOrDefault(emptyList())
+                                }
+                            }
+                        })
+                    )
+                }
+
+                Spacer(Modifier.width(9.dp))
+                RoundMapButton(Icons.Rounded.Person) { sheet = HomeSheet.SETTINGS }
+            }
+
+            if (results.isNotEmpty()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color.White.copy(alpha = 0.98f),
+                    shadowElevation = 10.dp
+                ) {
+                    Column(Modifier.padding(6.dp)) {
+                        results.take(5).forEach { result ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(15.dp))
+                                    .clickable {
+                                        query = result.name
+                                        results = emptyList()
+                                        placeName = result.name
+                                        center = LatLng(result.lat, result.lon)
+                                        zoom = 13.5
+                                        map?.animateCamera(CameraUpdateFactory.newLatLngZoom(center, zoom))
+                                        refreshAt(result.lat, result.lon, result.name)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Rounded.LocationOn, null, tint = HomeAccent)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(result.name, fontWeight = FontWeight.Bold, color = HomeInk)
+                                    if (result.subtitle.isNotBlank()) {
+                                        Text(result.subtitle, color = HomeMuted, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 13.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
+        ) {
+            RoundMapButton(Icons.Rounded.MyLocation) {
+                val fine = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+                val coarse = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.ACCESS_COARSE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+
+                if (!fine && !coarse) {
+                    locationPermission.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_COARSE_LOCATION,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        )
+                    )
+                } else {
+                    getCurrentLocation(context, fine) { lat, lon ->
+                        center = LatLng(lat, lon)
+                        zoom = 14.2
+                        placeName = "Current area"
+                        map?.animateCamera(CameraUpdateFactory.newLatLngZoom(center, zoom))
+                        refreshAt(lat, lon, "Current area")
+                    }
+                }
+            }
+            RoundMapButton(Icons.Rounded.Refresh) { refreshAt() }
+            RoundMapButton(Icons.Rounded.Tune) { sheet = HomeSheet.SETTINGS }
+        }
+
+        selected?.let { place ->
+            PlacePeek(
+                place = place,
+                canSave = session.userId != "guest",
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 14.dp, end = 14.dp, bottom = 104.dp),
+                onClose = { selected = null },
+                onSave = {
+                    if (session.userId != "guest") {
+                        scope.launch {
+                            runCatching { withContext(Dispatchers.IO) { Api.savePlace(session, place) } }
+                        }
+                    }
+                }
+            )
+        }
+
+        Text(
+            "© OpenStreetMap contributors · OpenFreeMap",
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 88.dp)
+                .background(Color.White.copy(alpha = 0.78f), RoundedCornerShape(8.dp))
+                .padding(horizontal = 7.dp, vertical = 3.dp),
+            fontSize = 9.sp,
+            color = HomeMuted
+        )
+
+        HomeBottomBar(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            onMap = { sheet = HomeSheet.NONE; selected = null },
+            onNearby = { sheet = HomeSheet.NEARBY },
+            onProfile = { sheet = HomeSheet.SETTINGS }
+        )
+    }
+
+    if (sheet == HomeSheet.NEARBY) {
+        ModalBottomSheet(
+            onDismissRequest = { sheet = HomeSheet.NONE },
+            containerColor = Color.White,
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            NearbySheet(
+                feed = feed,
+                placeName = placeName,
+                loading = loading,
+                onRefresh = { refreshAt(openSheet = true) },
+                onPlace = { place ->
+                    selected = place
+                    sheet = HomeSheet.NONE
+                    center = LatLng(place.lat, place.lon)
+                    zoom = 15.0
+                    map?.animateCamera(CameraUpdateFactory.newLatLngZoom(center, zoom))
+                },
+                onArticle = { url ->
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                }
+            )
+        }
+    }
+
+    if (sheet == HomeSheet.SETTINGS) {
+        ModalBottomSheet(
+            onDismissRequest = { sheet = HomeSheet.NONE },
+            containerColor = Color.White,
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            SettingsSheet(
+                session = session,
+                radius = radius,
+                windowHours = windowHours,
+                onRadius = { radius = it },
+                onWindow = { windowHours = it },
+                onApply = {
+                    sheet = HomeSheet.NONE
+                    refreshAt()
+                },
+                onLogout = onLogout
+            )
+        }
     }
 }
 
 @Composable
-private fun IntroScreen(onDone:()->Unit){
-    var page by remember{ mutableIntStateOf(0) }
-    val copy=listOf(
-        "A map with a pulse." to "Search anywhere on Earth and see real places, real photographs and current local coverage.",
-        "Real sources, not fake pins." to "OpenStreetMap, Wikimedia and recent news stay clearly separated so you know where every item came from.",
-        "Find a sidequest." to "Save public, documented ruins and historic places worth exploring safely from legal public areas."
-    )
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFD9E8FF),Color(0xFFEFE7FF),Color(0xFFF8F9FC))))){
-        Box(Modifier.fillMaxWidth().height(430.dp)){
-            NativeMap(LatLng(45.9432,24.9668),5.6,emptyList(),"Liberty",{}, {_,_,_->})
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,Color.Transparent,Color(0xFFF8F9FC)))))
-            Surface(Modifier.padding(start=20.dp,top=60.dp),shape=RoundedCornerShape(99.dp),color=Color.White.copy(.78f),shadowElevation=12.dp){Text("LIVE WORLD MAP",Modifier.padding(horizontal=16.dp,vertical=9.dp),fontWeight=FontWeight.Black,fontSize=11.sp)}
+private fun RoundMapButton(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.size(48.dp),
+        onClick = onClick,
+        shape = CircleShape,
+        color = Color.White.copy(alpha = 0.96f),
+        shadowElevation = 7.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = HomeInk, modifier = Modifier.size(21.dp))
         }
-        Column(Modifier.align(Alignment.BottomCenter).padding(24.dp,30.dp)){
-            Text("sidequest!",color=Violet,fontWeight=FontWeight.Black,fontSize=19.sp)
-            Spacer(Modifier.height(12.dp));Text(copy[page].first,fontSize=38.sp,lineHeight=40.sp,fontWeight=FontWeight.Black,color=Ink)
-            Spacer(Modifier.height(12.dp));Text(copy[page].second,fontSize=16.sp,lineHeight=23.sp,color=Muted)
-            Spacer(Modifier.height(24.dp));Row(verticalAlignment=Alignment.CenterVertically){
-                Row(Modifier.weight(1f),horizontalArrangement=Arrangement.spacedBy(6.dp)){repeat(3){i->Box(Modifier.height(7.dp).width(if(i==page)28.dp else 7.dp).clip(CircleShape).background(if(i==page)Ink else Color(0xFFCDD3DD)))}}
-                Button(onClick={if(page<2)page++ else onDone()},shape=RoundedCornerShape(22.dp),colors=ButtonDefaults.buttonColors(containerColor=Ink)){Text(if(page==2)"Join sidequest!" else "Next",fontWeight=FontWeight.Bold)}
+    }
+}
+
+@Composable
+private fun HomeBottomBar(
+    modifier: Modifier,
+    onMap: () -> Unit,
+    onNearby: () -> Unit,
+    onProfile: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .navigationBarsPadding()
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(25.dp),
+        color = Color.White.copy(alpha = 0.97f),
+        shadowElevation = 12.dp
+    ) {
+        Row(
+            Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HomeNavItem(Icons.Rounded.Map, "Map", true, onMap)
+            HomeNavItem(Icons.Rounded.Explore, "Nearby", false, onNearby)
+            HomeNavItem(Icons.Rounded.Person, "Account", false, onProfile)
+        }
+    }
+}
+
+@Composable
+private fun HomeNavItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, null, tint = if (active) HomeAccent else HomeMuted, modifier = Modifier.size(22.dp))
+        Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = if (active) HomeAccent else HomeMuted)
+    }
+}
+
+@Composable
+private fun PlacePeek(
+    place: MapPlace,
+    canSave: Boolean,
+    modifier: Modifier,
+    onClose: () -> Unit,
+    onSave: () -> Unit
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.White,
+        shadowElevation = 14.dp
+    ) {
+        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.size(74.dp),
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xFFE9EAF0)
+            ) {
+                if (place.image != null) {
+                    AsyncImage(place.image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                } else {
+                    Box(
+                        Modifier.fillMaxSize().background(
+                            Brush.linearGradient(listOf(Color(0xFFDDE3FF), Color(0xFFEDE5FF)))
+                        ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Rounded.Place, null, tint = HomeAccent)
+                    }
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(place.title, fontWeight = FontWeight.Black, color = HomeInk, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(3.dp))
+                Text(place.source, color = HomeMuted, fontSize = 11.sp)
+            }
+            if (canSave) {
+                IconButton(onClick = onSave) { Icon(Icons.Rounded.BookmarkBorder, null, tint = HomeAccent) }
+            }
+            IconButton(onClick = onClose) { Icon(Icons.Rounded.Close, null, tint = HomeMuted) }
+        }
+    }
+}
+
+@Composable
+private fun NearbySheet(
+    feed: DiscoverFeed,
+    placeName: String,
+    loading: Boolean,
+    onRefresh: () -> Unit,
+    onPlace: (MapPlace) -> Unit,
+    onArticle: (String) -> Unit
+) {
+    LazyColumn(
+        Modifier.fillMaxWidth().heightIn(max = 690.dp).padding(bottom = 28.dp)
+    ) {
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Nearby", fontSize = 27.sp, fontWeight = FontWeight.Black, color = HomeInk)
+                    Text(placeName, color = HomeMuted, fontSize = 13.sp)
+                }
+                IconButton(onClick = onRefresh, enabled = !loading) {
+                    Icon(Icons.Rounded.Refresh, null)
+                }
+            }
+        }
+
+        if (feed.signal.mentions > 0) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xFFFFF5DF)
+                ) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(Modifier.size(36.dp), shape = CircleShape, color = HomeWarning.copy(alpha = 0.22f)) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Rounded.AutoAwesome, null, tint = Color(0xFF9A6400), modifier = Modifier.size(19.dp))
+                            }
+                        }
+                        Spacer(Modifier.width(11.dp))
+                        Column {
+                            Text(
+                                "${feed.signal.mentions} unusual media mentions · ${feed.signal.window}",
+                                fontWeight = FontWeight.Bold,
+                                color = HomeInk,
+                                fontSize = 13.sp
+                            )
+                            Text(feed.signal.disclaimer, color = HomeMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        val places = feed.places + feed.wikiPlaces
+        if (places.isNotEmpty()) {
+            item { SheetTitle("PLACES", "Documented nearby places") }
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(places.take(16), key = { it.id }) { place ->
+                        NearbyPlaceCard(place, onClick = { onPlace(place) })
+                    }
+                }
+            }
+        }
+
+        if (feed.incidents.isNotEmpty()) {
+            item { SheetTitle("CURRENT COVERAGE", "Recent incident-related news mentions") }
+            items(feed.incidents.take(8)) { article ->
+                NewsRow(article) { article.url?.let(onArticle) }
+            }
+        } else if (feed.articles.isNotEmpty()) {
+            item { SheetTitle("LOCAL COVERAGE", "Recent articles mentioning this area") }
+            items(feed.articles.take(8)) { article ->
+                NewsRow(article) { article.url?.let(onArticle) }
+            }
+        }
+
+        if (places.isEmpty() && feed.articles.isEmpty() && !loading) {
+            item {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 26.dp, vertical = 42.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Rounded.ExploreOff, null, tint = HomeMuted, modifier = Modifier.size(34.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Text("Nothing useful found in this area yet.", color = HomeMuted)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AuthScreen(onSession:(Session)->Unit,onPreview:()->Unit){
-    val scope=rememberCoroutineScope();var email by remember{mutableStateOf("")};var pass by remember{mutableStateOf("")};var busy by remember{mutableStateOf(false)};var note by remember{mutableStateOf<String?>(null)}
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFDDEAFF),Color(0xFFF1E9FF),Color(0xFFF8F9FC))))){
-        Column(Modifier.fillMaxSize().padding(24.dp),verticalArrangement=Arrangement.Center){
-            Surface(Modifier.size(72.dp),shape=RoundedCornerShape(24.dp),color=Violet,shadowElevation=18.dp){Box(contentAlignment=Alignment.Center){Text("S",color=Color.White,fontSize=32.sp,fontWeight=FontWeight.Black)}}
-            Spacer(Modifier.height(20.dp));Text("Join sidequest!",fontSize=38.sp,fontWeight=FontWeight.Black,color=Ink);Text("Email accounts and cloud sync are live on the free backend.",color=Muted)
-            Spacer(Modifier.height(22.dp));OutlinedTextField(email,{email=it},Modifier.fillMaxWidth(),label={Text("Email")},singleLine=true,shape=RoundedCornerShape(20.dp))
-            Spacer(Modifier.height(10.dp));OutlinedTextField(pass,{pass=it},Modifier.fillMaxWidth(),label={Text("Password")},singleLine=true,visualTransformation=PasswordVisualTransformation(),shape=RoundedCornerShape(20.dp),keyboardOptions=KeyboardOptions(imeAction=ImeAction.Done))
-            Spacer(Modifier.height(14.dp));Button(onClick={if(email.isBlank()||pass.length<6){note="Enter a valid email and password.";return@Button};busy=true;scope.launch{runCatching{withContext(Dispatchers.IO){Api.signIn(email.trim(),pass)}}.onSuccess(onSession).onFailure{note=it.message};busy=false}},enabled=!busy,modifier=Modifier.fillMaxWidth().height(56.dp),shape=RoundedCornerShape(20.dp),colors=ButtonDefaults.buttonColors(containerColor=Ink)){if(busy)CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp,color=Color.White)else Text("Sign in with email",fontWeight=FontWeight.Bold)}
-            Spacer(Modifier.height(9.dp));OutlinedButton(onClick={if(email.isBlank()||pass.length<6){note="Enter a valid email and password.";return@OutlinedButton};busy=true;scope.launch{runCatching{withContext(Dispatchers.IO){Api.signUp(email.trim(),pass)}}.onSuccess{if(it!=null)onSession(it)else note="Account created. Confirm the email, then sign in."}.onFailure{note=it.message};busy=false}},modifier=Modifier.fillMaxWidth().height(54.dp),shape=RoundedCornerShape(20.dp)){Text("Create account",fontWeight=FontWeight.Bold)}
-            Spacer(Modifier.height(18.dp));SocialButton("G","Continue with Google"){note="Google is prepared in the app, but needs a free Google OAuth client ID before it can go live."};Spacer(Modifier.height(8.dp));SocialButton("#","Continue with phone"){note="SMS login is disabled in the 100% free build because SMS providers charge per message."}
-            note?.let{Spacer(Modifier.height(12.dp));Text(it,color=Muted,fontSize=13.sp)}
-            TextButton(onClick=onPreview,modifier=Modifier.align(Alignment.CenterHorizontally)){Text("Explore without an account",color=Muted)}
-        }
+private fun SheetTitle(kicker: String, subtitle: String) {
+    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 9.dp)) {
+        Text(kicker, fontSize = 11.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Black, color = HomeMuted)
+        Text(subtitle, fontSize = 13.sp, color = HomeMuted)
     }
 }
 
 @Composable
-private fun SocialButton(letter:String,text:String,onClick:()->Unit){OutlinedButton(onClick=onClick,modifier=Modifier.fillMaxWidth().height(52.dp),shape=RoundedCornerShape(20.dp)){Surface(Modifier.size(30.dp),shape=CircleShape,color=Color(0xFFF0F2F6)){Box(contentAlignment=Alignment.Center){Text(letter,fontWeight=FontWeight.Black)}};Spacer(Modifier.width(12.dp));Text(text,fontWeight=FontWeight.Bold,color=Ink)}}
-
-@Composable
-private fun MapScreen(session:Session?,onLogout:()->Unit){
-    val context=LocalContext.current;val scope=rememberCoroutineScope()
-    var center by remember{mutableStateOf(LatLng(45.9432,24.9668))};var zoom by remember{mutableDoubleStateOf(6.0)};var placeName by remember{mutableStateOf("Romania")};var query by remember{mutableStateOf("")};var results by remember{mutableStateOf<List<SearchPlace>>(emptyList())};var feed by remember{mutableStateOf(DiscoverFeed())};var loading by remember{mutableStateOf(false)};var feedOpen by remember{mutableStateOf(false)};var settingsOpen by remember{mutableStateOf(false)};var radius by remember{mutableIntStateOf(12)};var windowHours by remember{mutableIntStateOf(24)};var mapStyle by remember{mutableStateOf("Liberty")};var map by remember{mutableStateOf<MapLibreMap?>(null)};var selected by remember{mutableStateOf<MapPlace?>(null)}
-    val markers=remember(feed){feed.places+feed.wikiPlaces}
-    fun refresh(){loading=true;scope.launch{runCatching{withContext(Dispatchers.IO){Api.discover(center.latitude,center.longitude,placeName,radius,windowHours,session)}}.onSuccess{feed=it;feedOpen=true};loading=false}}
-    LaunchedEffect(Unit){refresh()}
-    val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()){g->if(g[Manifest.permission.ACCESS_COARSE_LOCATION]==true||g[Manifest.permission.ACCESS_FINE_LOCATION]==true)getCurrentLocation(context,g[Manifest.permission.ACCESS_FINE_LOCATION]==true){a,b->center=LatLng(a,b);zoom=14.5;placeName="Current area";map?.animateCamera(CameraUpdateFactory.newLatLngZoom(center,zoom));refresh()}}
-    Box(Modifier.fillMaxSize().background(Color(0xFFDDE8F4))){
-        NativeMap(center,zoom,markers,mapStyle,onMapReady={m->map=m;m.setOnMarkerClickListener{mk->selected=markers.firstOrNull{it.title==mk.title};selected!=null}},onCameraIdle={a,b,z->center=LatLng(a,b);zoom=z})
-        Column(Modifier.fillMaxSize()){
-            Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding()+10.dp));Row(Modifier.padding(horizontal=14.dp),verticalAlignment=Alignment.CenterVertically){
-                Surface(Modifier.weight(1f).shadow(14.dp,RoundedCornerShape(28.dp)),shape=RoundedCornerShape(28.dp),color=Color.White.copy(.80f)){TextField(query,{query=it},Modifier.fillMaxWidth(),placeholder={Text("Search any place in the world",color=Muted)},leadingIcon={Icon(Icons.Rounded.Search,null)},trailingIcon={if(query.isNotEmpty())IconButton(onClick={query="";results=emptyList()}){Icon(Icons.Rounded.Close,null)}},colors=TextFieldDefaults.colors(unfocusedContainerColor=Color.Transparent,focusedContainerColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent,focusedIndicatorColor=Color.Transparent),singleLine=true,keyboardOptions=KeyboardOptions(imeAction=ImeAction.Search),keyboardActions=KeyboardActions(onSearch={scope.launch{results=runCatching{withContext(Dispatchers.IO){Api.searchPlaces(query)}}.getOrDefault(emptyList())}}))}
-                Spacer(Modifier.width(9.dp));GlassIcon(Icons.Rounded.Person,true){feedOpen=true}
+private fun NearbyPlaceCard(place: MapPlace, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.width(210.dp).height(156.dp).clickable(onClick = onClick),
+        shape = RoundedCornerShape(22.dp),
+        color = Color(0xFFE9EAF0)
+    ) {
+        Box {
+            if (place.image != null) {
+                AsyncImage(place.image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.linearGradient(listOf(Color(0xFFDDE4FF), Color(0xFFECE4FF)))
+                    )
+                )
             }
-            AnimatedVisibility(results.isNotEmpty()){Surface(Modifier.padding(horizontal=14.dp,vertical=8.dp).fillMaxWidth(),shape=RoundedCornerShape(24.dp),color=Color.White.copy(.95f),shadowElevation=12.dp){Column(Modifier.padding(8.dp)){results.take(5).forEach{r->Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable{placeName=r.name;center=LatLng(r.lat,r.lon);zoom=13.5;query=r.name;results=emptyList();map?.animateCamera(CameraUpdateFactory.newLatLngZoom(center,zoom));refresh()}.padding(12.dp),verticalAlignment=Alignment.CenterVertically){Icon(Icons.Rounded.LocationOn,null,tint=Violet);Spacer(Modifier.width(10.dp));Column{Text(r.name,fontWeight=FontWeight.Bold);if(r.subtitle.isNotBlank())Text(r.subtitle,color=Muted,fontSize=12.sp)}}}}}}
-            Spacer(Modifier.weight(1f))
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent, Color(0xC8000000)))
+                )
+            )
+            Column(Modifier.align(Alignment.BottomStart).padding(13.dp)) {
+                Text(place.title, color = Color.White, fontWeight = FontWeight.Black, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(place.source, color = Color.White.copy(alpha = 0.80f), fontSize = 10.sp)
+            }
         }
-        Column(Modifier.align(Alignment.CenterEnd).padding(end=14.dp),verticalArrangement=Arrangement.spacedBy(9.dp)){GlassIcon(Icons.Rounded.MyLocation){val fine=ContextCompat.checkSelfPermission(context,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;val coarse=ContextCompat.checkSelfPermission(context,Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;if(!fine&&!coarse)permission.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION))else getCurrentLocation(context,fine){a,b->center=LatLng(a,b);zoom=14.5;placeName="Current area";map?.animateCamera(CameraUpdateFactory.newLatLngZoom(center,zoom));refresh()}};GlassIcon(Icons.Rounded.Refresh){refresh()};GlassIcon(Icons.Rounded.Layers){settingsOpen=true}}
-        if(feed.signal.mentions>0)Surface(Modifier.align(Alignment.TopCenter).padding(top=106.dp).clickable{feedOpen=true},shape=RoundedCornerShape(99.dp),color=Color(0xEEFFF2D3),shadowElevation=8.dp){Row(Modifier.padding(horizontal=14.dp,vertical=9.dp),verticalAlignment=Alignment.CenterVertically){Box(Modifier.size(8.dp).clip(CircleShape).background(if(feed.signal.level=="high")Danger else Color(0xFFFFB23D)));Spacer(Modifier.width(8.dp));Text("${feed.signal.mentions} unusual media mentions · ${feed.signal.window}",fontSize=12.sp,fontWeight=FontWeight.Bold)}}
-        if(loading)LinearProgressIndicator(Modifier.align(Alignment.TopCenter).fillMaxWidth(),color=Violet)
-        selected?.let{p->PlacePreview(p,Modifier.align(Alignment.BottomCenter).padding(start=14.dp,end=14.dp,bottom=104.dp),onClose={selected=null},onSave={if(session!=null)scope.launch{runCatching{withContext(Dispatchers.IO){Api.savePlace(session,p)}}}})}
-        BottomDock(Modifier.align(Alignment.BottomCenter),onFeed={feedOpen=true},onSettings={settingsOpen=true})
-        AnimatedVisibility(feedOpen){FeedSheet(feed,placeName,onClose={feedOpen=false},onPlace={p->selected=p;feedOpen=false;map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(p.lat,p.lon),15.0))},onArticle={u->runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(u)))}})}
-        AnimatedVisibility(settingsOpen){SettingsSheet(radius,windowHours,mapStyle,onRadius={radius=it},onWindow={windowHours=it},onStyle={mapStyle=it;map?.setStyle(styleUri(it))},onClose={settingsOpen=false},onRefresh={settingsOpen=false;refresh()},session=session,onLogout=onLogout)}
     }
 }
 
 @Composable
-private fun NativeMap(center:LatLng,zoom:Double,markers:List<MapPlace>,styleName:String,onMapReady:(MapLibreMap)->Unit,onCameraIdle:(Double,Double,Double)->Unit){
-    val context=LocalContext.current;val lifecycle=LocalLifecycleOwner.current.lifecycle;val view=remember{MapView(context).apply{onCreate(Bundle())}};var map by remember{mutableStateOf<MapLibreMap?>(null)}
-    DisposableEffect(lifecycle,view){val o=LifecycleEventObserver{_,e->when(e){Lifecycle.Event.ON_START->view.onStart();Lifecycle.Event.ON_RESUME->view.onResume();Lifecycle.Event.ON_PAUSE->view.onPause();Lifecycle.Event.ON_STOP->view.onStop();Lifecycle.Event.ON_DESTROY->view.onDestroy();else->Unit}};lifecycle.addObserver(o);onDispose{lifecycle.removeObserver(o)}}
-    AndroidView(factory={view},modifier=Modifier.fillMaxSize()){v->if(map==null)v.getMapAsync{m->map=m;m.uiSettings.isLogoEnabled=false;m.cameraPosition=CameraPosition.Builder().target(center).zoom(zoom).build();m.setStyle(Style.Builder().fromUri(styleUri(styleName)));m.addOnCameraIdleListener{m.cameraPosition.target?.let{c->onCameraIdle(c.latitude,c.longitude,m.cameraPosition.zoom)}};onMapReady(m)}}
-    LaunchedEffect(markers,map){map?.let{m->m.clear();markers.take(120).forEach{p->m.addMarker(MarkerOptions().position(LatLng(p.lat,p.lon)).title(p.title).snippet(p.source))}}}
+private fun NewsRow(article: NewsItem, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(Modifier.size(76.dp), shape = RoundedCornerShape(17.dp), color = Color(0xFFE9EAF0)) {
+            if (article.image != null) {
+                AsyncImage(article.image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Article, null, tint = HomeMuted)
+                }
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(article.title, fontWeight = FontWeight.Bold, color = HomeInk, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                listOfNotNull(article.domain, article.seenDate).joinToString(" · "),
+                color = HomeMuted,
+                fontSize = 10.sp,
+                maxLines = 1
+            )
+        }
+        Icon(Icons.Rounded.ChevronRight, null, tint = HomeMuted)
+    }
 }
 
-private fun styleUri(s:String)=when(s){"Bright"->"https://tiles.openfreemap.org/styles/bright";"Positron"->"https://tiles.openfreemap.org/styles/positron";else->"https://tiles.openfreemap.org/styles/liberty"}
+@Composable
+private fun SettingsSheet(
+    session: Session,
+    radius: Int,
+    windowHours: Int,
+    onRadius: (Int) -> Unit,
+    onWindow: (Int) -> Unit,
+    onApply: () -> Unit,
+    onLogout: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+        Text("Settings", fontSize = 27.sp, fontWeight = FontWeight.Black, color = HomeInk)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            if (session.userId == "guest") "Guest session" else session.email,
+            color = HomeMuted,
+            fontSize = 13.sp
+        )
+
+        Spacer(Modifier.height(22.dp))
+        Text("Area radius", fontWeight = FontWeight.Bold, color = HomeInk)
+        Spacer(Modifier.height(9.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(5, 12, 25).forEach { value ->
+                FilterChip(
+                    selected = radius == value,
+                    onClick = { onRadius(value) },
+                    label = { Text("$value km") }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+        Text("News window", fontWeight = FontWeight.Bold, color = HomeInk)
+        Spacer(Modifier.height(9.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(6, 24, 168).forEach { value ->
+                val label = if (value == 168) "7 days" else "$value h"
+                FilterChip(
+                    selected = windowHours == value,
+                    onClick = { onWindow(value) },
+                    label = { Text(label) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(22.dp))
+        Button(
+            onClick = onApply,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(17.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = HomeInk)
+        ) {
+            Text("Apply and refresh", fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(
+            onClick = onLogout,
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            shape = RoundedCornerShape(17.dp)
+        ) {
+            Icon(if (session.userId == "guest") Icons.Rounded.Login else Icons.Rounded.Logout, null)
+            Spacer(Modifier.width(8.dp))
+            Text(if (session.userId == "guest") "Sign in" else "Sign out")
+        }
+    }
+}
 
 @Composable
-private fun GlassIcon(icon:androidx.compose.ui.graphics.vector.ImageVector,accent:Boolean=false,onClick:()->Unit){Surface(Modifier.size(52.dp).shadow(12.dp,CircleShape).clickable(onClick=onClick),shape=CircleShape,color=if(accent)Violet else Color.White.copy(.82f)){Box(contentAlignment=Alignment.Center){Icon(icon,null,tint=if(accent)Color.White else Ink)}}}
+private fun NativeMap(
+    center: LatLng,
+    zoom: Double,
+    markers: List<MapPlace>,
+    onMapReady: (MapLibreMap) -> Unit,
+    onCameraIdle: (Double, Double, Double) -> Unit,
+    onMarker: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var internalMap by remember { mutableStateOf<MapLibreMap?>(null) }
 
-@Composable
-private fun BottomDock(modifier:Modifier,onFeed:()->Unit,onSettings:()->Unit){Surface(modifier.padding(start=16.dp,end=16.dp,bottom=14.dp).fillMaxWidth().height(76.dp).shadow(20.dp,RoundedCornerShape(30.dp)),shape=RoundedCornerShape(30.dp),color=Color.White.copy(.86f)){Row(Modifier.fillMaxSize().padding(horizontal=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceAround){Dock(Icons.Rounded.Explore,"Explore",onFeed);Dock(Icons.Rounded.Bookmark,"Saved",onFeed);FloatingActionButton(onClick=onFeed,containerColor=Violet,contentColor=Color.White,shape=CircleShape,modifier=Modifier.size(58.dp)){Icon(Icons.Rounded.Add,null)};Dock(Icons.Rounded.Settings,"Settings",onSettings)}}}
-@Composable private fun Dock(i:androidx.compose.ui.graphics.vector.ImageVector,t:String,on:()->Unit){Column(Modifier.width(72.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick=on).padding(vertical=8.dp),horizontalAlignment=Alignment.CenterHorizontally){Icon(i,null,tint=Muted);Text(t,fontSize=10.sp,color=Muted,fontWeight=FontWeight.Medium)}}
+    val mapView = remember {
+        MapView(context).apply { onCreate(null) }
+    }
 
-@Composable
-private fun FeedSheet(feed:DiscoverFeed,placeName:String,onClose:()->Unit,onPlace:(MapPlace)->Unit,onArticle:(String)->Unit){Box(Modifier.fillMaxSize().background(Color.Black.copy(.18f)).clickable(onClick=onClose)){Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(.74f).clickable(enabled=false){},shape=RoundedCornerShape(topStart=32.dp,topEnd=32.dp),color=Color(0xFFF8F9FC),shadowElevation=24.dp){LazyColumn(contentPadding=PaddingValues(bottom=30.dp)){item{Row(Modifier.padding(20.dp).fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(placeName,fontSize=28.sp,fontWeight=FontWeight.Black);Text("Live feed · ${feed.signal.window}",color=Muted)};IconButton(onClick=onClose){Icon(Icons.Rounded.Close,null)}}};if(feed.signal.mentions>0)item{SignalCard(feed.signal)};val places=feed.wikiPlaces+feed.places;if(places.isNotEmpty()){item{SectionTitle("PLACES WORTH A LOOK","Documented public sources")};item{LazyRow(contentPadding=PaddingValues(horizontal=18.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){items(places.take(18),key={it.id}){p->PlaceCard(p){onPlace(p)}}}}};if(feed.articles.isNotEmpty()){item{SectionTitle("RECENT COVERAGE","Real articles matched to this area")};items(feed.articles.take(25)){a->NewsCard(a){a.url?.let(onArticle)}}};item{Text("Sources: OpenStreetMap/Overpass · Wikipedia/Wikimedia · GDELT. Unusual-media signals are keyword matches, not proof of paranormal activity. Do not enter restricted or unsafe structures.",Modifier.padding(20.dp),color=Muted,fontSize=11.sp,lineHeight=16.sp)}}}}}
+    DisposableEffect(lifecycleOwner, mapView) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> mapView.onStart()
+                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                Lifecycle.Event.ON_STOP -> mapView.onStop()
+                Lifecycle.Event.ON_DESTROY -> mapView.onDestroy()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            runCatching { mapView.onDestroy() }
+        }
+    }
 
-@Composable private fun SignalCard(s:Signal){Surface(Modifier.padding(horizontal=18.dp).fillMaxWidth(),shape=RoundedCornerShape(24.dp),color=Color(0xFFFFF2D4)){Row(Modifier.padding(16.dp),verticalAlignment=Alignment.CenterVertically){Surface(Modifier.size(42.dp),shape=CircleShape,color=Color(0xFFFFCA60)){Box(contentAlignment=Alignment.Center){Icon(Icons.Rounded.AutoAwesome,null)}};Spacer(Modifier.width(12.dp));Column{Text("${s.mentions} unusual media mentions",fontWeight=FontWeight.Black);Text(s.disclaimer,color=Muted,fontSize=11.sp,lineHeight=15.sp)}}}}
-@Composable private fun SectionTitle(a:String,b:String){Column(Modifier.padding(start=20.dp,end=20.dp,top=24.dp,bottom=10.dp)){Text(a,fontSize=12.sp,fontWeight=FontWeight.Black,letterSpacing=1.sp,color=Muted);Text(b,fontSize=12.sp,color=Muted)}}
-@Composable private fun PlaceCard(p:MapPlace,on:()->Unit){Surface(Modifier.width(230.dp).height(190.dp).clickable(onClick=on),shape=RoundedCornerShape(26.dp),color=Color.White,shadowElevation=4.dp){Box{if(p.image!=null)AsyncImage(p.image,null,Modifier.fillMaxSize(),contentScale=ContentScale.Crop)else Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xFFD7E7FF),Color(0xFFE9DEFF)))));Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent,Color.Transparent,Color(0xCC11141B)))));Column(Modifier.align(Alignment.BottomStart).padding(14.dp)){Text(p.title,color=Color.White,fontWeight=FontWeight.Black,maxLines=2,overflow=TextOverflow.Ellipsis);Text(p.source,color=Color.White.copy(.82f),fontSize=11.sp)}}}}
-@Composable private fun NewsCard(a:NewsItem,on:()->Unit){Row(Modifier.fillMaxWidth().clickable(onClick=on).padding(horizontal=18.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){Surface(Modifier.size(92.dp),shape=RoundedCornerShape(20.dp),color=Color(0xFFE5E8EF)){if(a.image!=null)AsyncImage(a.image,null,Modifier.fillMaxSize(),contentScale=ContentScale.Crop)else Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Icon(Icons.Rounded.Article,null,tint=Muted)}};Spacer(Modifier.width(13.dp));Column(Modifier.weight(1f)){Text(a.title,fontWeight=FontWeight.Bold,maxLines=3,overflow=TextOverflow.Ellipsis);Spacer(Modifier.height(5.dp));Text(listOfNotNull(a.domain,a.seenDate).joinToString(" · "),color=Muted,fontSize=11.sp)}}}
-@Composable private fun PlacePreview(p:MapPlace,m:Modifier,onClose:()->Unit,onSave:()->Unit){Surface(m.fillMaxWidth(),shape=RoundedCornerShape(26.dp),color=Color.White.copy(.94f),shadowElevation=16.dp){Row(Modifier.padding(12.dp),verticalAlignment=Alignment.CenterVertically){Surface(Modifier.size(58.dp),shape=RoundedCornerShape(18.dp),color=Color(0xFFE7EAF1)){if(p.image!=null)AsyncImage(p.image,null,Modifier.fillMaxSize(),contentScale=ContentScale.Crop)else Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Icon(Icons.Rounded.LocationOn,null)}};Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text(p.title,fontWeight=FontWeight.Black,maxLines=1,overflow=TextOverflow.Ellipsis);Text(p.source,color=Muted,fontSize=11.sp)};IconButton(onClick=onSave){Icon(Icons.Rounded.BookmarkAdd,null,tint=Violet)};IconButton(onClick=onClose){Icon(Icons.Rounded.Close,null)}}}}
+    LaunchedEffect(mapView) {
+        mapView.getMapAsync { map ->
+            internalMap = map
+            map.uiSettings.apply {
+                isLogoEnabled = false
+                isAttributionEnabled = false
+                isCompassEnabled = false
+            }
+            map.cameraPosition = CameraPosition.Builder().target(center).zoom(zoom).build()
+            map.setStyle(Style.Builder().fromUri("https://tiles.openfreemap.org/styles/liberty")) {
+                map.clear()
+                markers.forEach { place ->
+                    map.addMarker(MarkerOptions().position(LatLng(place.lat, place.lon)).title(place.title))
+                }
+            }
+            map.setOnMarkerClickListener { marker ->
+                marker.title?.let(onMarker)
+                true
+            }
+            map.addOnCameraIdleListener {
+                val target = map.cameraPosition.target ?: return@addOnCameraIdleListener
+                onCameraIdle(target.latitude, target.longitude, map.cameraPosition.zoom)
+            }
+            onMapReady(map)
+        }
+    }
 
-@Composable
-private fun SettingsSheet(radius:Int,window:Int,style:String,onRadius:(Int)->Unit,onWindow:(Int)->Unit,onStyle:(String)->Unit,onClose:()->Unit,onRefresh:()->Unit,session:Session?,onLogout:()->Unit){Box(Modifier.fillMaxSize().background(Color.Black.copy(.16f)).clickable(onClick=onClose)){Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().clickable(enabled=false){},shape=RoundedCornerShape(topStart=32.dp,topEnd=32.dp),color=Color(0xFFF8F9FC)){Column(Modifier.padding(20.dp).padding(bottom=18.dp)){Row(verticalAlignment=Alignment.CenterVertically){Text("Map & live data",fontSize=28.sp,fontWeight=FontWeight.Black,modifier=Modifier.weight(1f));IconButton(onClick=onClose){Icon(Icons.Rounded.Close,null)}};Text("Search radius",fontWeight=FontWeight.Bold);Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf(5,12,25).forEach{FilterChip(selected=radius==it,onClick={onRadius(it)},label={Text("$it km")})}};Spacer(Modifier.height(14.dp));Text("News window",fontWeight=FontWeight.Bold);Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf(6,24,168).forEach{FilterChip(selected=window==it,onClick={onWindow(it)},label={Text(if(it==168)"7 days" else "$it h")})}};Spacer(Modifier.height(14.dp));Text("Map style",fontWeight=FontWeight.Bold);Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("Liberty","Bright","Positron").forEach{s->FilterChip(selected=style==s,onClick={onStyle(s)},label={Text(s)})}};Spacer(Modifier.height(18.dp));Button(onClick=onRefresh,Modifier.fillMaxWidth().height(52.dp),shape=RoundedCornerShape(18.dp),colors=ButtonDefaults.buttonColors(containerColor=Ink)){Text("Apply & refresh",fontWeight=FontWeight.Bold)};session?.let{Spacer(Modifier.height(10.dp));OutlinedButton(onClick=onLogout,Modifier.fillMaxWidth(),shape=RoundedCornerShape(18.dp)){Text("Sign out · ${it.email}")}}}}}}
+    LaunchedEffect(markers, internalMap) {
+        internalMap?.let { map ->
+            map.clear()
+            markers.forEach { place ->
+                map.addMarker(MarkerOptions().position(LatLng(place.lat, place.lon)).title(place.title))
+            }
+        }
+    }
 
-private fun getCurrentLocation(context:android.content.Context,high:Boolean,result:(Double,Double)->Unit){val lm=context.getSystemService(LocationManager::class.java);val provider=if(high&&lm.isProviderEnabled(LocationManager.GPS_PROVIDER))LocationManager.GPS_PROVIDER else LocationManager.NETWORK_PROVIDER;try{lm.getCurrentLocation(provider,CancellationSignal(),context.mainExecutor){l->if(l!=null)result(l.latitude,l.longitude)}}catch(_:SecurityException){}}
+    AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+}
+
+private fun getCurrentLocation(
+    context: Context,
+    fine: Boolean,
+    onLocation: (Double, Double) -> Unit
+) {
+    val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    val preferred = if (fine && manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+        LocationManager.GPS_PROVIDER
+    } else {
+        LocationManager.NETWORK_PROVIDER
+    }
+
+    try {
+        manager.getCurrentLocation(
+            preferred,
+            CancellationSignal(),
+            context.mainExecutor
+        ) { location ->
+            if (location != null) onLocation(location.latitude, location.longitude)
+        }
+    } catch (_: SecurityException) {
+    } catch (_: IllegalArgumentException) {
+    }
+}
