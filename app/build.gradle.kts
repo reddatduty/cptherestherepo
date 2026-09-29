@@ -4,6 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val firebaseApiKey = providers.gradleProperty("FIREBASE_API_KEY").orNull ?: System.getenv("FIREBASE_API_KEY") ?: ""
+val firebaseAppId = providers.gradleProperty("FIREBASE_APP_ID").orNull ?: System.getenv("FIREBASE_APP_ID") ?: ""
+val firebaseProjectId = providers.gradleProperty("FIREBASE_PROJECT_ID").orNull ?: System.getenv("FIREBASE_PROJECT_ID") ?: ""
+
 android {
     namespace = "com.sidequest.app"
     compileSdk = 36
@@ -12,11 +16,17 @@ android {
         applicationId = "com.sidequest.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.9.0-native"
+        versionCode = 10
+        versionName = "1.0.0-firebase"
+        buildConfigField("String", "FIREBASE_API_KEY", "\"$firebaseApiKey\"")
+        buildConfigField("String", "FIREBASE_APP_ID", "\"$firebaseAppId\"")
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"$firebaseProjectId\"")
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     buildTypes {
         release {
@@ -52,5 +62,11 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-compose:3.3.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
     implementation("org.maplibre.gl:android-sdk:13.3.1")
+
+    val firebaseBom = platform("com.google.firebase:firebase-bom:34.19.0")
+    implementation(firebaseBom)
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
